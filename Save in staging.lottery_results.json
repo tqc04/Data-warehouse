@@ -1,0 +1,184 @@
+{
+  "name": "Save in staging.lottery_results",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a9a002f7-416c-49f6-a70a-ab280c41ccbb",
+      "name": "Schedule Trigger1"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/home/node/data/xsmn_{{DateTime.now().toFormat(\"yyyy-MM-dd\")}}.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "77396bd0-7341-4f63-97c5-a852b773760a",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "19c8913b-2c2c-4b2c-90c1-7ddc35f1f1fb",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cấu trúc hiện tại:\n// items[0].json.data = [ { fileName, data: { provinces, prize_db, ... } } ]\n\nconst top = items[0].json.data;\n\n// Lấy object đầu tiên\nconst wrapper = Array.isArray(top) ? top[0] : top;\n\n// Đây mới là JSON chứa provinces, prize_db, prize1, ...\nconst data = wrapper.data;\n\n// Lấy danh sách tỉnh\nconst provinces = data.provinces;\nconst provinceCount = provinces.length;\n\n// Lấy ngày, convert sang YYYY-MM-DD\nconst dayRaw = Array.isArray(data.day) ? data.day[0] : data.day;\nlet draw_date = null;\nif (dayRaw) {\n  const m = dayRaw.match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})/);\n  if (m) {\n    draw_date = `${m[3]}-${m[2]}-${m[1]}`;\n  }\n}\n\nconst PRIZE3_PER_PROVINCE = 2;\nconst PRIZE4_PER_PROVINCE = 7;\nconst PRIZE6_PER_PROVINCE = 3;\n\n// Hàm chia mảng theo số lượng phần tử mỗi tỉnh\nfunction safeSplitArray(arr, perProvinceCount, provinceCount, prizeName) {\n  const expected = perProvinceCount * provinceCount;\n  const res = [];\n\n  if (!arr || arr.length !== expected) {\n    console.warn(`⚠️ ${prizeName} sai số lượng. Expect ${expected}, got ${arr ? arr.length : 0}`);\n    for (let i = 0; i < provinceCount; i++) {\n      res.push(Array(perProvinceCount).fill(null));\n    }\n    return res;\n  }\n\n  let idx = 0;\n  for (let i = 0; i < provinceCount; i++) {\n    res.push(\n      arr.slice(idx, idx + perProvinceCount).map(x => x?.toString().trim() ?? null)\n    );\n    idx += perProvinceCount;\n  }\n  return res;\n}\n\nconst prize3Split = safeSplitArray(data.prize3, PRIZE3_PER_PROVINCE, provinceCount, \"prize3\");\nconst prize4Split = safeSplitArray(data.prize4, PRIZE4_PER_PROVINCE, provinceCount, \"prize4\");\nconst prize6Split = safeSplitArray(data.prize6, PRIZE6_PER_PROVINCE, provinceCount, \"prize6\");\n\nfunction safeGet(arr, idx, prizeName, province) {\n  if (!arr || arr.length <= idx) {\n    console.warn(`⚠️ ${prizeName} thiếu dữ liệu cho ${province}`);\n    return null;\n  }\n  return arr[idx]?.toString().trim() ?? null;\n}\n\nlet output = [];\n\nfor (let i = 0; i < provinceCount; i++) {\n  const province = provinces[i];\n\n  // Giải Đặc Biệt\n  output.push({\n    json: {\n      province,\n      prize_type: \"prize_db\",\n      prize_number: safeGet(data.prize_db, i, \"prize_db\", province),\n      draw_date,\n    },\n  });\n\n  // Giải 1\n  output.push({\n    json: {\n      province,\n      prize_type: \"prize1\",\n      prize_number: safeGet(data.prize1, i, \"prize1\", province),\n      draw_date,\n    },\n  });\n\n  // Giải 2\n  output.push({\n    json: {\n      province,\n      prize_type: \"prize2\",\n      prize_number: safeGet(data.prize2, i, \"prize2\", province),\n      draw_date,\n    },\n  });\n\n  // Giải 3 (2 số mỗi tỉnh)\n  for (const num of prize3Split[i]) {\n    output.push({\n      json: {\n        province,\n        prize_type: \"prize3\",\n        prize_number: num,\n        draw_date,\n      },\n    });\n  }\n\n  // Giải 4 (7 số mỗi tỉnh)\n  for (const num of prize4Split[i]) {\n    output.push({\n      json: {\n        province,\n        prize_type: \"prize4\",\n        prize_number: num,\n        draw_date,\n      },\n    });\n  }\n\n  // Giải 5\n  output.push({\n    json: {\n      province,\n      prize_type: \"prize5\",\n      prize_number: safeGet(data.prize5, i, \"prize5\", province),\n      draw_date,\n    },\n  });\n\n  // Giải 6 (3 số mỗi tỉnh)\n  for (const num of prize6Split[i]) {\n    output.push({\n      json: {\n        province,\n        prize_type: \"prize6\",\n        prize_number: num,\n        draw_date,\n      },\n    });\n  }\n\n  // Giải 7\n  output.push({\n    json: {\n      province,\n      prize_type: \"prize7\",\n      prize_number: safeGet(data.prize7, i, \"prize7\", province),\n      draw_date,\n    },\n  });\n\n  // Giải 8\n  output.push({\n    json: {\n      province,\n      prize_type: \"prize8\",\n      prize_number: safeGet(data.prize8, i, \"prize8\", province),\n      draw_date,\n    },\n  });\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "ab84eb34-36f9-4607-82ba-641af7beb8c4",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE SCHEMA IF NOT EXISTS staging;\n\nCREATE TABLE IF NOT EXISTS staging.lottery_results (\n    id BIGSERIAL PRIMARY KEY,\n    province VARCHAR(100) NOT NULL,\n    prize_type VARCHAR(50) NOT NULL,\n    prize_value VARCHAR(100) NOT NULL,\n    draw_date DATE NOT NULL,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n    CONSTRAINT lottery_results_unique_entry UNIQUE (province, draw_date, prize_type, prize_value)\n);\n\nINSERT INTO staging.lottery_results (province, prize_type, prize_value, draw_date)\nVALUES (\n  '{{$json[\"province\"]}}',\n  '{{$json[\"prize_type\"]}}',\n  '{{$json[\"prize_number\"]}}',\n  '{{$json[\"draw_date\"]}}'\n)\nON CONFLICT (province, draw_date, prize_type, prize_value)\nDO NOTHING;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        832,
+        0
+      ],
+      "id": "56ed4042-2c05-4251-8d4f-f45065d28b51",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO controller.log (action, status, message)\nVALUES (\n  'LOAD_LOTTERY_RESULTS',\n  'success',\n  'Dữ liệu đã được lưu vào bảng staging.lottery_results'\n);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1056,
+        0
+      ],
+      "id": "498a4b88-e88d-491e-9270-0e1d439cc227",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "kLnux5ck6kXRItsf"
+  },
+  "versionId": "0cec5a60-7ef3-4bd4-9a1a-3e620f4c3ab1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3a635942a7e924cb90962be1df239495b76faf7a2e7cd5a5c56f1b212aea2065"
+  },
+  "id": "Ucnih0vIC1JymoFv",
+  "tags": []
+}
