@@ -1,0 +1,113 @@
+version: "3.8"
+
+services:
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n-n8n-1
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=123456
+      - N8N_SECURE_COOKIE=false
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=n8n_pass
+    volumes:
+      - ~/.n8n:/home/node/.n8n
+      - ~/backup/n8n:/home/node/backups
+      - ../data:/home/node/data
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15
+    container_name: n8n-postgres-1
+    restart: always
+    environment:
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: n8n_pass
+      POSTGRES_DB: n8n_data
+    ports:
+      - "5432:5432"
+    volumes:
+      - n8n_postgres_data:/var/lib/postgresql/data
+      - ~/backup/db_dumps:/var/lib/postgresql/backup
+
+  backup:
+    image: alpine:latest
+    container_name: n8n_backup
+    restart: unless-stopped
+    volumes:
+      - ~/backup:/backup
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      sh -c "
+        echo '🔁 Backup service started';
+        apk update >/dev/null 2>&1;
+        apk add --no-cache postgresql-client docker-cli bash coreutils findutils >/dev/null 2>&1;
+        set -e;
+        while true; do
+          NOW=$(date +%Y-%m-%d);
+          echo '🕖 Running backup at' \"$(date)\" ' -- NOW='$$NOW;
+
+          echo '📌 Dumping postgres DB into container...';
+          docker exec n8n-postgres-1 sh -c \"pg_dump -U n8n -F c -f /var/lib/postgresql/data/backup_$$NOW.dump n8n_data\";
+
+          echo '🔍 Check dump file inside postgres container:';
+          docker exec n8n-postgres-1 sh -c \"ls -l /var/lib/postgresql/data/backup_$$NOW.dump || true\";
+
+          echo '📦 Copying dump to host /backup...';
+          docker cp n8n-postgres-1:/var/lib/postgresql/data/backup_$$NOW.dump /backup/backup_$$NOW.dump;
+
+          echo '📌 Exporting n8n workflows inside n8n container...';
+          docker exec n8n-n8n-1 sh -c \"n8n export:workflow --all --output=/home/node/backups/workflows_$$NOW.json\";
+          docker exec n8n-n8n-1 sh -c \"ls -l /home/node/backups/workflows_$$NOW.json || true\";
+          docker cp n8n-n8n-1:/home/node/backups/workflows_$$NOW.json /backup/workflows_$$NOW.json;
+
+          echo '✅ Backup complete: /backup/backup_'$$NOW'.dump';
+          echo '📁 Files in /backup:';
+          ls -l /backup || true;
+
+          # Xóa backup cũ hơn 7 ngày
+          find /backup -type f -mtime +7 -name 'backup_*.dump' -delete || true;
+          find /backup -type f -mtime +7 -name 'workflows_*.json' -delete || true;
+
+          echo '🧹 Old backups cleaned up';
+          sleep 86400;
+        done
+      "
+
+  config_loader:
+    image: python:3.10
+    container_name: config_loader
+    restart: always
+    depends_on:
+      - postgres
+    volumes:
+      - ../config:/config
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: n8n_data
+      PGUSER: n8n
+      PGPASSWORD: n8n_pass
+      TZ: Asia/Ho_Chi_Minh
+    command: >
+      sh -c "
+        apt-get update -qq &&
+        apt-get install -y cron -qq &&
+        pip install psycopg2-binary &&
+        echo '30 18 * * * root python3 /config/config.py >> /var/log/config_cron.log 2>&1' > /etc/crontab &&
+        echo '📌 Cronjob loaded: chạy lúc 06:55 mỗi ngày (Asia/Ho_Chi_Minh)' &&
+        cron -f
+      "
+
+volumes:
+  n8n_postgres_data:
+    external: true
