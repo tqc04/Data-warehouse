@@ -1,0 +1,339 @@
+{
+  "name": "load_config_and_read_HTML",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 18,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1616,
+        -272
+      ],
+      "id": "519f5e64-4ac7-4dc8-ab48-21a45a62e5fa",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.config.source_url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1280,
+        -464
+      ],
+      "id": "8140ff96-27ed-4023-a4e8-f3162d3582de",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "data",
+              "cssSelector": "section[id^=\"mn_kqngay_\"]",
+              "returnValue": "html",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        -1104,
+        -464
+      ],
+      "id": "ed668fb1-c325-4819-bab1-e634c10865b4",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "provinces",
+              "cssSelector": "h3 a[href^=\"/xo-so-\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize_db",
+              "cssSelector": "span[id*=\"prize_Db\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize1",
+              "cssSelector": "span[id*=\"prize1\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize3",
+              "cssSelector": "span[id*=\"prize3\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize4",
+              "cssSelector": "span[id*=\"prize4\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize5",
+              "cssSelector": "span[id*=\"prize5\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize6",
+              "cssSelector": "span[id*=\"prize6\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize7",
+              "cssSelector": "span[id*=\"prize7\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize8",
+              "cssSelector": "span[id*=\"prize8\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "day",
+              "cssSelector": "h2.site-link a[title*=\"/\"]",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "prize2",
+              "cssSelector": "span[id*=\"prize2\"]",
+              "returnValue": "html",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        -912,
+        -464
+      ],
+      "id": "3b245466-ea2a-4244-be4b-1854e3f4bd10",
+      "name": "HTML1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lấy raw từ item đầu\nconst raw = items[0].json;\n\n// Nếu raw là array thì lấy phần tử đầu\nconst data = Array.isArray(raw) ? raw[0] : raw;\n\n// Lấy ngày từ field \"day\", ví dụ: \"XSMN 21/11/2025\"\nlet fileDate = 'unknown';\nif (Array.isArray(data.day) && data.day[0]) {\n  const m = data.day[0].match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})/);\n  if (m) {\n    // -> 2025-11-21\n    fileDate = `${m[3]}-${m[2]}-${m[1]}`;\n  }\n}\n\n// Tên file: xsmn_2025-11-21.json\nconst fileName = `xsmn_${fileDate}.json`;\n\nreturn [\n  {\n    json: {\n      fileName,\n      data  // toàn bộ json xổ số để ghi ra file\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1424,
+        -256
+      ],
+      "id": "978bf9a7-9291-4897-992e-97b3f0b0d74b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {
+          "fileName": "={{ `/home/node/backups/${$json[\"fileName\"]}` }}"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1264,
+        -256
+      ],
+      "id": "ea004bec-5587-4650-883a-211bfbcfd0bd",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/data/xsmn_{{DateTime.now().toFormat(\"yyyy-MM-dd\")}}.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1104,
+        -256
+      ],
+      "id": "8ddca2f7-8637-4fb2-8fd5-a895bd9c5079",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO controller.log (action, status, message)\nVALUES (\n  'INIT_CONFIG_LOAD',\n  'success',\n  'Config lottery version mới đã được insert thành công vào controller.app_config'\n);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -960,
+        -256
+      ],
+      "id": "3fd96320-0f05-4429-99e7-bec2ab2338e5",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT config\nFROM controller.app_config\nWHERE name = 'lottery'\nORDER BY version DESC\nLIMIT 1;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1456,
+        -464
+      ],
+      "id": "ca849d41-492f-45f1-9996-ef27694d5577",
+      "name": "Load Config in database",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Config in database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "HTML1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Config in database": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "kLnux5ck6kXRItsf",
+    "timeSavedPerExecution": 10
+  },
+  "versionId": "b363ff8e-4e6c-451b-b53d-73fea0aee068",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3a635942a7e924cb90962be1df239495b76faf7a2e7cd5a5c56f1b212aea2065"
+  },
+  "id": "Tydha72D3LW7j9fh",
+  "tags": []
+}
