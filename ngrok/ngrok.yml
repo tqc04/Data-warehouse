@@ -1,0 +1,12 @@
+version: "2"
+authtoken: 31Vw0piIUmm8V7cupkbx4qq2aRq_4bLQU1Netrxp3UjjCfWco
+
+tunnels:
+  ssh:
+    proto: tcp
+    addr: 22
+
+  web:
+    proto: http
+    addr: 5678
+    hostname: helping-cockatoo-legible.ngrok-free.app
