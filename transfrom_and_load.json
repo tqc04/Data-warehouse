@@ -1,0 +1,175 @@
+{
+  "name": "transfrom_and_load",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 19,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a2078762-69f1-44bc-a0a3-54c1a2d93fcd",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Bước 0: Tạo schema nếu chưa tồn tại\nCREATE SCHEMA IF NOT EXISTS dwh;\n\n-- --------------------------------------------------------------------\n-- PHẦN A: ĐẢM BẢO CẤU TRÚC DATABASE LUÔN ĐÚNG\n-- --------------------------------------------------------------------\n\n-- Bước 1.1: Tạo các bảng Dimension nếu chưa tồn tại\nCREATE TABLE IF NOT EXISTS dwh.dim_prize_type (\n    prize_type_id SERIAL PRIMARY KEY,\n    prize_type_name VARCHAR(50) UNIQUE NOT NULL,\n    prize_money NUMERIC(15, 0)\n);\n\nCREATE TABLE IF NOT EXISTS dwh.dim_province (\n    province_id SERIAL PRIMARY KEY,\n    province_name VARCHAR(100) UNIQUE NOT NULL\n);\n\nCREATE TABLE IF NOT EXISTS dwh.dim_date (\n    date_id INT PRIMARY KEY,\n    full_date DATE NOT NULL UNIQUE,\n    day_of_week INT NOT NULL,\n    day_name VARCHAR(20) NOT NULL,\n    month_of_year INT NOT NULL,\n    month_name VARCHAR(20) NOT NULL,\n    year_val INT NOT NULL,\n    quarter_of_year INT NOT NULL\n);\n\n-- Bước 1.2: Tạo bảng Fact nếu chưa tồn tại\nCREATE TABLE IF NOT EXISTS dwh.fact_lottery_results (\n    id BIGSERIAL PRIMARY KEY,\n    draw_date_id INT NOT NULL REFERENCES dwh.dim_date(date_id),\n    province_id INT NOT NULL REFERENCES dwh.dim_province(province_id),\n    prize_type_id INT NOT NULL REFERENCES dwh.dim_prize_type(prize_type_id),\n    prize_value VARCHAR(100) NOT NULL,\n    loaded_at TIMESTAMPTZ DEFAULT NOW(),\n    UNIQUE (draw_date_id, province_id, prize_type_id, prize_value)\n);\n\n-- --------------------------------------------------------------------\n-- PHẦN B: NẠP VÀ CẬP NHẬT DỮ LIỆU DIMENSION CHUẨN\n-- --------------------------------------------------------------------\n\n-- Bước 2.1: Upsert cơ cấu giải thưởng\nINSERT INTO dwh.dim_prize_type (prize_type_name, prize_money)\nVALUES\n    ('Giải Đặc Biệt', 2000000000), ('Giải Nhất', 30000000),\n    ('Giải Nhì', 15000000), ('Giải Ba', 10000000),\n    ('Giải Tư', 3000000), ('Giải Năm', 1000000),\n    ('Giải Sáu', 400000), ('Giải Bảy', 200000),\n    ('Giải Tám', 100000), ('Giải Phụ đặc biệt', 50000000),\n    ('Giải Khuyến khích', 6000000)\nON CONFLICT (prize_type_name) DO UPDATE SET prize_money = EXCLUDED.prize_money;\n\n-- Bước 2.2: Nạp dữ liệu cho dim_date\nINSERT INTO dwh.dim_date (\n    date_id,\n    full_date,\n    day_of_week,\n    day_name,\n    month_of_year,\n    month_name,\n    year_val,\n    quarter_of_year\n)\nSELECT\n    TO_CHAR(d, 'YYYYMMDD')::INT,\n    d,\n    EXTRACT(ISODOW FROM d),\n    TO_CHAR(d, 'Day'),\n    EXTRACT(MONTH FROM d),\n    TO_CHAR(d, 'Month'),\n    EXTRACT(YEAR FROM d),\n    EXTRACT(QUARTER FROM d)\nFROM generate_series('2025-01-01'::DATE, '2035-12-31'::DATE, '1 day'::INTERVAL) d\nON CONFLICT (date_id) DO NOTHING;\n\n-- Bước 2.3: Nạp dữ liệu cho dim_province\nINSERT INTO dwh.dim_province (province_name)\nSELECT DISTINCT province\nFROM staging.lottery_results\nON CONFLICT (province_name) DO NOTHING;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        -80
+      ],
+      "id": "baf927e0-f449-4728-9cbb-7f9ab74aae49",
+      "name": "Transfrom",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- --------------------------------------------------------------------\n-- PHẦN C: NẠP DỮ LIỆU CHÍNH VÀO BẢNG FACT\n-- --------------------------------------------------------------------\n\nINSERT INTO dwh.fact_lottery_results (draw_date_id, province_id, prize_type_id, prize_value)\nSELECT\n    dd.date_id,\n    dp.province_id,\n    dpt.prize_type_id,\n    stg.prize_value\nFROM\n    staging.lottery_results stg\nJOIN dwh.dim_province dp ON stg.province = dp.province_name\nJOIN dwh.dim_date dd ON stg.draw_date::DATE = dd.full_date\n-- JOIN với BỘ PHIÊN DỊCH để lấy prize_type_id từ tên giải đã được làm đẹp\nJOIN dwh.dim_prize_type dpt ON dpt.prize_type_name = (\n    CASE stg.prize_type\n        WHEN 'prize_db' THEN 'Giải Đặc Biệt'\n        WHEN 'prize1'   THEN 'Giải Nhất'\n        WHEN 'prize2'   THEN 'Giải Nhì'\n        WHEN 'prize3'   THEN 'Giải Ba'\n        WHEN 'prize4'   THEN 'Giải Tư'\n        WHEN 'prize5'   THEN 'Giải Năm'\n        WHEN 'prize6'   THEN 'Giải Sáu'\n        WHEN 'prize7'   THEN 'Giải Bảy'\n        WHEN 'prize8'   THEN 'Giải Tám'\n        ELSE 'Không xác định'\n    END\n)\nON CONFLICT (draw_date_id, province_id, prize_type_id, prize_value) DO NOTHING;\n\n-- --------------------------------------------------------------------\n-- PHẦN D: DỌN DẸP (TUỲ CHỌN)\n-- --------------------------------------------------------------------\n-- TRUNCATE TABLE staging.lottery_results;\nSELECT \n  'FACT_LOAD_DONE' AS status,\n  NOW() AS finished_at;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        416,
+        32
+      ],
+      "id": "b3fc5446-e59c-446d-a0a0-e6d6e5dbefba",
+      "name": "Load",
+      "alwaysOutputData": false,
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO controller.log (action, status, message)\nVALUES (\n  'TRANSFORM_AND_LOAD_SUCCESS',\n  'success',\n  'Dữ liệu từ staging.lottery_results đã được transform và nạp vào DWH (dimensions + fact)'\n);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        608,
+        -96
+      ],
+      "id": "cfa318bc-7fbd-41a4-9a2e-fd319950c857",
+      "name": "Log",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "gazc2512@gmail.com",
+        "toEmail": "22130068@st.hcmuaf.edu.vn",
+        "subject": "Hoàn tất cào dữ liệu xổ số Miền Nam",
+        "html": "=<!doctype html>\n\n<html lang=\"vi\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width\">\n<title>Thông báo: Hoàn tất nạp dữ liệu Xổ số vào Data Warehouse</title>\n</head>\n<body style=\"margin:0;padding:0;background-color:#f4f4f5;font-family:Helvetica,Arial,sans-serif;color:#111;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;margin:30px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.08);\">\n<tr>\n<td style=\"padding:20px 24px;background:#0f172a;color:#fff;\">\n<h1 style=\"margin:0;font-size:18px;\">Hoàn tất nạp dữ liệu Xổ số vào Data Warehouse</h1>\n</td>\n</tr>\n\n<tr>\n  <td style=\"padding:20px 24px;\">\n    <p style=\"margin:0 0 12px 0;\">\n      Tôi xin thông báo rằng quá trình <strong>xử lý và nạp dữ liệu (ETL)</strong> từ khu vực Staging vào mô hình Data Warehouse đã được <strong>thực hiện thành công</strong>.\n      Dữ liệu đã được chuyển đổi và lưu trữ trong các bảng Dimension và Fact, sẵn sàng cho việc phân tích và tạo báo cáo.\n    </p>\n\n    <table role=\"presentation\" cellpadding=\"6\" cellspacing=\"0\" style=\"width:100%;border-collapse:collapse;margin:12px 0;\">\n      <tr>\n        <td style=\"width:38%;font-weight:600;border-top:1px solid #eee;padding-top:8px;\">Giai đoạn</td>\n        <td style=\"border-top:1px solid #eee;padding-top:8px;\">ETL (Staging ➔ Data Warehouse)</td>\n      </tr>\n      <tr>\n        <td style=\"font-weight:600;\">Trạng thái</td>\n        <td>Hoàn tất</td>\n      </tr>\n      <tr>\n        <td style=\"font-weight:600;\">Thời gian hoàn thành</td>\n        <td>{{DateTime.now().setZone(\"Asia/Ho_Chi_Minh\").toFormat(\"dd/MM/yyyy, HH:mm\")}}</td>\n      </tr>\n      <tr>\n        <td style=\"font-weight:600;\">Mô hình dữ liệu</td>\n        <td>Dimension / Fact</td>\n      </tr>\n    </table>\n\n    <p style=\"margin:12px 0 12px 0;\">\n      Vui lòng kiểm tra và xác nhận nếu cần thêm bất kỳ thao tác hoặc báo cáo nào khác.\n    </p>\n\n    <p style=\"margin:18px 0 0 0;\">\n      Trân trọng,<br>\n      <strong>{{ $env.MY_NAME || 'Hải' }}</strong><br>\n      <span style=\"color:#6b7280;\">\n        {{ $env.MY_ROLE || 'Nhóm Data Warehouse' }} • {{ $env.MY_EMAIL || 'gazc2512@gmail.com' }}\n      </span>\n    </p>\n  </td>\n</tr>\n\n<tr>\n  <td style=\"padding:12px 24px;background:#f9fafb;color:#6b7280;font-size:13px;text-align:center;\">\n    Bản tin tự động — Hệ thống ETL\n  </td>\n</tr>\n</table>\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        16
+      ],
+      "id": "1c21b07e-11bc-453a-8ef3-86e6b492cb0c",
+      "name": "Send email",
+      "webhookId": "1525c1fc-ef69-4c21-be03-9919a8a0aa6c",
+      "credentials": {
+        "smtp": {
+          "id": "IHvIlSEeVzdcVXsR",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Transfrom",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transfrom": {
+      "main": [
+        [
+          {
+            "node": "Load",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load": {
+      "main": [
+        [
+          {
+            "node": "Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "kLnux5ck6kXRItsf",
+    "timeSavedPerExecution": 10
+  },
+  "versionId": "7ee054c6-82c1-402f-8eeb-1e7e317b3e15",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3a635942a7e924cb90962be1df239495b76faf7a2e7cd5a5c56f1b212aea2065"
+  },
+  "id": "rmTV2acjYm2cHFn3",
+  "tags": []
+}
