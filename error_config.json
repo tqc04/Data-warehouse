@@ -1,0 +1,166 @@
+{
+  "name": "error_config",
+  "nodes": [
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "controller",
+          "mode": "list",
+          "cachedResultName": "controller"
+        },
+        "tableName": {
+          "__rl": true,
+          "value": "log",
+          "mode": "list",
+          "cachedResultName": "log"
+        },
+        "additionalFields": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTrigger",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        -224
+      ],
+      "id": "077992b6-c573-4445-b10d-9c6819189e11",
+      "name": "Postgres Trigger",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM controller.log\nWHERE status = 'FAIL'\nORDER BY created_at DESC\nLIMIT 1;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        432,
+        -304
+      ],
+      "id": "7e04c722-9254-4bff-9d90-a15c4b5294cd",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "gazc2512@gmail.com",
+        "toEmail": "22130068@st.hcmuaf.edu.vn",
+        "subject": "=[n8n][ERROR] {{ $json[\"action\"] }} bị lỗi\n",
+        "html": "=<!doctype html>\n<html lang=\"vi\">\n  <body style=\"font-family: Arial, sans-serif; font-size: 14px;\">\n    <h3>🚨 Workflow báo lỗi từ hệ thống</h3>\n\n    <p><b>Action:</b> {{ $json[\"action\"] }}</p>\n    <p><b>Thời gian:</b> {{ $json[\"created_at\"] }}</p>\n\n    <hr>\n\n    <p><b>Thông báo lỗi:</b></p>\n    <pre style=\"background:#f5f5f5; padding:8px; white-space:pre-wrap;\">\n{{ $json[\"message\"] }}\n    </pre>\n\n    <hr>\n    <p>Email được gửi tự động từ hệ thống n8n – vui lòng kiểm tra và xử lý.</p>\n  </body>\n</html>\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        640,
+        -304
+      ],
+      "id": "6351f9ef-3775-4633-8b34-93a2ef817811",
+      "name": "Send email",
+      "webhookId": "1525c1fc-ef69-4c21-be03-9919a8a0aa6c",
+      "credentials": {
+        "smtp": {
+          "id": "IHvIlSEeVzdcVXsR",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f553dda0-8c00-4aed-9a44-8666542cb451",
+              "leftValue": "={{$json[\"payload\"][\"status\"]}}",
+              "rightValue": "fail",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "ignoreCase": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        176,
+        -224
+      ],
+      "id": "d7e0830b-ce49-4849-8d3a-da7ad574cf2e",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Postgres Trigger": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "kLnux5ck6kXRItsf"
+  },
+  "versionId": "67bad249-f59c-4f65-a759-47daffeaac20",
+  "meta": {
+    "instanceId": "3a635942a7e924cb90962be1df239495b76faf7a2e7cd5a5c56f1b212aea2065"
+  },
+  "id": "0STRAOoKOZ72jzE5",
+  "tags": []
+}

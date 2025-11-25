@@ -1,0 +1,98 @@
+{
+  "name": "Error",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        -224
+      ],
+      "id": "4153575e-0171-4fc0-9fc3-3c1e030ba8f8",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "fromEmail": "gazc2512@gmail.com",
+        "toEmail": "22130068@st.hcmuaf.edu.vn",
+        "subject": "=[n8n][ERROR] Workflow {{$json[\"workflow\"][\"name\"]}} bị lỗi",
+        "html": "=<!doctype html>\n<html lang=\"vi\">\n  <body style=\"font-family: Arial, sans-serif; font-size: 14px;\">\n    <h3>🚨 Workflow bị lỗi</h3>\n\n    <p><b>Workflow:</b> {{ $json[\"workflow\"][\"name\"] }} (ID: {{ $json[\"workflow\"][\"id\"] }})</p>\n    <p><b>Execution ID:</b> {{ $json[\"execution\"][\"id\"] }}</p>\n    <p><b>Execution URL:</b> <a href=\"{{ $json[\"execution\"][\"url\"] }}\">{{ $json[\"execution\"][\"url\"] }}</a></p>\n    <p><b>Chạy lại của execution:</b> {{ $json[\"execution\"][\"retryOf\"] || 'N/A' }}</p>\n    <p><b>Node lỗi:</b> {{ $json[\"execution\"][\"lastNodeExecuted\"] }}</p>\n    <p><b>Mode:</b> {{ $json[\"execution\"][\"mode\"] }}</p>\n\n    <hr>\n\n    <p><b>Thông báo lỗi:</b></p>\n    <pre style=\"background:#f5f5f5; padding:8px; white-space:pre-wrap;\">\n{{ $json[\"execution\"][\"error\"][\"message\"] }}\n    </pre>\n\n    <p><b>Stack trace:</b></p>\n    <pre style=\"background:#f5f5f5; padding:8px; white-space:pre-wrap;\">\n{{ $json[\"execution\"][\"error\"][\"stack\"] || 'N/A' }}\n    </pre>\n\n    <hr>\n    <p>Email tự động từ hệ thống n8n – vui lòng kiểm tra và xử lý.</p>\n  </body>\n</html>\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        -112,
+        -144
+      ],
+      "id": "edfe04a9-f440-4792-8b73-84531766ba11",
+      "name": "Send email",
+      "webhookId": "1525c1fc-ef69-4c21-be03-9919a8a0aa6c",
+      "credentials": {
+        "smtp": {
+          "id": "IHvIlSEeVzdcVXsR",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO controller.log (action, status, message)\nVALUES (\n  'WF_ERROR: {{$json[\"workflow\"][\"name\"]}}',\n  'FAIL',\n  'Workflow ID={{$json[\"workflow\"][\"id\"]}}, '\n  || 'Execution ID={{$json[\"execution\"][\"id\"]}}, '\n  || 'Node lỗi={{$json[\"execution\"][\"lastNodeExecuted\"]}}, '\n  || 'Error={{$json[\"execution\"][\"error\"][\"message\"]}}'\n);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -112,
+        -352
+      ],
+      "id": "03a0e811-15af-42d7-8be5-a18d8a3652bf",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "FIsVZO6pPumLWm15",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "2473ea66-9613-4530-b3ef-b1c235a2f8b5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3a635942a7e924cb90962be1df239495b76faf7a2e7cd5a5c56f1b212aea2065"
+  },
+  "id": "kLnux5ck6kXRItsf",
+  "tags": []
+}
